@@ -21,7 +21,7 @@ class Product(Base):
     name = Column(String(30), nullable=False)
     price = Column(Integer, nullable=False)
     amount = Column(Integer, nullable=False)
-    barcodes = relationship("Barcode")
+    barcodes = relationship("Barcode", back_populates="product", cascade="all, delete")
     def __repr__(self):
         return f"Product(id={self.id!r}, name={self.name!r}, price={self.price!r}, amount={self.amount!r}"
 
@@ -30,6 +30,7 @@ class Barcode(Base):
     id = Column(Integer, primary_key=True)
     barcode = Column(String(30), nullable=False)
     product_id = Column(Integer, ForeignKey("product.id"), nullable=False)
+    product = relationship("Product", back_populates="barcode")
     def __repr__(self):
         return f"Barcode(id={self.id!r}, barcode={self.barcode!r}, product_id={self.product_id!r}"
 
