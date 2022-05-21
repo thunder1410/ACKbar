@@ -19,12 +19,19 @@ class Product(Base):
     __tablename__ = "product"
     id = Column(Integer, primary_key=True)
     name = Column(String(30), nullable=False)
-    barcode = Column(String(30), nullable=False)
     price = Column(Integer, nullable=False)
-    type = Column(String(30), nullable=False)
     amount = Column(Integer, nullable=False)
+    barcodes = relationship("Barcode")
     def __repr__(self):
-        return f"Product(id={self.id!r}, name={self.name!r}, barcode={self.barcode!r}, price={self.price!r}, amount={self.amount!r}"
+        return f"Product(id={self.id!r}, name={self.name!r}, price={self.price!r}, amount={self.amount!r}"
+
+class Barcode(Base):
+    __tablename__ = "barcode"
+    id = Column(Integer, primary_key=True)
+    barcode = Column(String(30), nullable=False)
+    product_id = Column(Integer, ForeignKey("product.id"), nullable=False)
+    def __repr__(self):
+        return f"Barcode(id={self.id!r}, barcode={self.barcode!r}, product_id={self.product_id!r}"
 
 class Log(Base):
     __tablename__ = "log"

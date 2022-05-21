@@ -1,11 +1,9 @@
 #!/usr/bin/python
-from models import Base, User, Product, Font
+from models import Base, User, Product, Barcode, Font
 from sqlalchemy import func
 from database import Session, engine
 import os, time
 from colorama import Fore, Style
-
-# Testing visual studio code config... 4
 
 clearConsole = lambda: os.system('cls' if os.name in ('nt', 'dos') else 'clear')
 
@@ -162,8 +160,8 @@ def main(Session):
                     time.sleep(2)
                 else:
                     productQueries = []
-                    for productQuery in session.query(Product).filter(Product.barcode==scanned):
-                        productQueries.append(productQuery)
+                    for barcodeQuery in session.query(Barcode).filter(Barcode.barcode==scanned):
+                        productQueries.append(barcodeQuery.product)
                     if len(productQueries) == 0:
                         print(warning("Invalid product code."))
                         time.sleep(1)
