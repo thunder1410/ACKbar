@@ -12,6 +12,6 @@ while True:
         code = input("Barcode: ")
         
         product = Product(name=name, price=price, amount=0)
-        barcode = Barcode(barcode=barcode, product_id=product.id)
+        barcode = Barcode(barcode=code, product_id=product.id)
         session.add_all([product, barcode])
         session.commit()
