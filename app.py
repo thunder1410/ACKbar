@@ -1,27 +1,12 @@
 #!/usr/bin/python
 from models import Base, User, Product, Barcode, Font
+from models import KasMutatie, KasMutatieSoort
+from models import BankStorting
+from models import VoorraadMutatie, VoorraadMutatieSoort
 from sqlalchemy import func
 from database import Session, engine
 import os, time
-from colorama import Fore, Style
-
-clearConsole = lambda: os.system('cls' if os.name in ('nt', 'dos') else 'clear')
-
-def succes(s):
-    return Fore.GREEN + s + Style.RESET_ALL
-
-def question(s):
-    return Style.BRIGHT + s + Style.RESET_ALL
-
-def info(s):
-    return Style.DIM + s + Style.RESET_ALL
-
-def warning(s):
-    return Fore.YELLOW + s + Style.RESET_ALL
-
-def error(s):
-    return Fore.RED + s + Style.RESET_ALL
-
+from console import clearConsole, succes, question, info, warning, error, input_yesno, input_deposit
 
 def logo(font):
     clearConsole()
@@ -30,53 +15,25 @@ def logo(font):
     else:
         os.system(f"figlet -t -f {font.name} ACKbar | lolcat")
 
-def input_yesno(q):
-    while True:
-        answer = input(question(f"{q} y/n: ")).lower()
-        if answer == "y" or answer == "yes":
-            return "y"
-        if answer == "n" or answer == "no":
-            return "n"
-
-def input_deposit():
-    full = 0
-    cents = 0
-    isValid = False
-    while not isValid:
-        raw_money = input(question("How much money do you want to deposit: "))
-        if "." in raw_money and len(raw_money.split(".")) == 2:
-            try:
-                full = int(raw_money.split(".")[0])
-                cents = int(raw_money.split(".")[1])
-            except:
-                pass
-            else:
-                if full >= 0 and cents >= 0:
-                    isValid = True
-        else:
-            try:
-                full = int(raw_money)
-            except:
-                pass
-            else:
-                if full >= 0:
-                    isValid = True
-    money = full * 100 + cents
-    return money
-
-def purchaseScreen(users, products, deposit, total, font):
+def purchaseScreen(users, products, deposit, transfers, total, font):
     logo(font)
     print("")
     print(f"Hello {users[0].name}, you have {(users[0].balance/100):.2f} on your account.")
     print(f"")
     print(info("Commands:"))
-    print(info(" (A)ccept transaction"))
-    print(info(" (C)ancel transaction"))
-    print(info(" (D)eposit"))
+    print(info("  accept  - Accept transaction"))
+    print(info("  bank    - Deposit with wire transfer"))
+    print(info("  cash    - Deposit with cash"))
+    print(info("  cancel  - Cancel transaction"))
     print("")
     print(f"{'balance' : <25} {(users[0].balance/100):6.2f}")
     if deposit > 0:
         print(f"{'deposit'.ljust(25)} {(deposit/100):6.2f}")
+
+    for transfer in transfers:
+        foo = f"transfer {transfer[1]}"
+        print(f"{foo.ljust(25)} {(transfer[0]/100):6.2f}")
+
     if len(products) > 0:
         for product in products:
             print(f"{product.name.ljust(25)} {(-product.price/100):6.2f}")
@@ -86,11 +43,58 @@ def purchaseScreen(users, products, deposit, total, font):
 def startScreen(font):
     logo(font)
     print("")
-    print(info(f"Score: {font.score}"))
-    print(info("Psstt... (u)pvote or (d)ownvote this logo!"))
+    print(info(f"{font.name} {font.score}"))
+    print()
+    print("Commands:")
+    print("  u     - upvote logo")
+    print("  d     - downvote logo")
 
 def randomFont(session):
     return session.query(Font).order_by(func.random()).first()
+
+def performCheckout(user, products, deposit, session):
+    # Add the prices of all the products
+    totalPrice = 0
+    for product in products:
+        totalPrice += product.price
+
+    # Can the user afford this?
+    if totalPrice > (user.balance + deposit):
+        return False
+
+    # The user has enough money and the transaction is going to be executed
+    else:
+        user.balance += deposit
+        user.balance -= totalPrice
+
+        # If cash has been deposited, we record a kas mutation
+        if deposit > 0:
+            session.add( KasMutatie(mutatiesoort=KasMutatieSoort.storting, user_id=user.id, bedrag=deposit) )
+
+        # If products have been bought, we record a voorraad mutation
+        voorraadmutaties = {}
+        for product in products:
+            if voorraadmutaties.get(product.id, None) is None:
+                voorraadmutaties[product.id] = {"count":1, "unitprice":product.price}
+            else:
+                voorraadmutaties[product.id]["count"] += 1
+        for product_id in voorraadmutaties:
+            hoeveelheid = voorraadmutaties[product_id]["count"]
+            bedrag = voorraadmutaties[product_id]["unitprice"] * hoeveelheid
+            voorraadmutatie = VoorraadMutatie(
+                mutatiesoort=VoorraadMutatieSoort.koop,
+                product_id=product_id,
+                user_id=user.id,
+                hoeveelheid=-hoeveelheid,
+                bedrag=bedrag
+            )
+            session.add(voorraadmutatie)
+
+        # We finalize the transaction
+        session.commit()
+        return True
+
+
 
 def main(Session):
     isRunning = True
@@ -101,16 +105,25 @@ def main(Session):
 
         users = []
 
-        if scanned.lower() == "q":
+        # User wants to quit the program
+        if scanned.lower() == "q" or scanned.lower() == "quit":
             isRunning = False
+
+        # User wants to upvote the logo
         elif scanned == "u":
             font.score += 1
             font = None
+
+        # User wants to downvote the logo
         elif scanned == "d":
             font.score -= 1
             font = None
+
+        # User entered nothing, refresh screen
         elif scanned == "":
             pass
+
+        # User wants to login or create a new account
         else:
             for userQuery in session.query(User).filter(func.lower(User.name)==scanned.lower()):
                 users.append(userQuery)
@@ -129,45 +142,66 @@ def main(Session):
         if len(users) == 1:
             userBusy = True
             products = []
+            transfers = []
             deposit = 0
 
             while userBusy:
                 total = users[0].balance + deposit
                 for product in products:
                     total -= product.price
-                purchaseScreen(users, products, deposit, total, font)
-                scanned = input(question("\nType command(A,C,D) or scan product: "))
-                if scanned.lower() == "d":
+                for transfer in transfers:
+                    total += transfer[0]
+                purchaseScreen(users, products, deposit, transfers, total, font)
+                scanned = input(question("\nType command or scan product: "))
+
+                # User wants to deposit money
+                if scanned.lower() == "cash":
                     deposit += input_deposit()
-                elif scanned.lower() == "a":
-                    totalPrice = 0
-                    for product in products:
-                        totalPrice += product.price
-                    if totalPrice <= (users[0].balance + deposit):
-                        users[0].balance += deposit
-                        users[0].balance -= totalPrice
+
+                # User wants to transfer money
+                elif scanned.lower() == "bank":
+                    session.flush()
+                    transactionNo = session.query(BankStorting).filter(BankStorting.user_id==users[0].id).count()
+                    code = f"BAR-{users[0].id}-{transactionNo}"
+                    print()
+                    print(f"Please perform a wire transfer with the following info:")
+                    print(f"Rekening      -  NL16 ABNA 0563 9410 06")
+                    print(f"Ten name van  -  Stichting ACKspace")
+                    print(f"Omschrijving  -  {code}")
+                    print()
+                    bedrag = input_deposit()
+                    isTransfer = input_yesno("Confirm transfer?") == "y"
+                    if isTransfer:
+                        transfers.append([bedrag, code])
+                        session.add( BankStorting(user_id=users[0].id, bedrag=bedrag, code=code) )
+
+                # User wants to finish transaction
+                elif scanned.lower() == "accept":
+                    if performCheckout(users[0], products, deposit, session):
                         print(succes("Transaction confirmed!"))
                         time.sleep(2)
-                        # LOG
                         userBusy = False
                     else:
-                        print(warning(f"Not enough funds! You need an additional {(total*-0.01):.2f}"))
+                        print(warning(f"Not enough funds! Check the tab."))
                         time.sleep(1)
-                elif scanned.lower() == "c":
+
+                # User wants to cancel transaction
+                elif scanned.lower() == "cancel":
                     print(warning(f"Transaction canceled!"))
                     session.rollback()
                     userBusy = False
                     time.sleep(2)
+
+                # User wants to scan a product
                 else:
                     productQueries = []
                     for barcodeQuery in session.query(Barcode).filter(Barcode.barcode==scanned):
                         productQueries.append(barcodeQuery.product)
                     if len(productQueries) == 0:
-                        print(warning("Invalid product code."))
+                        print(warning("Invalid product code or command."))
                         time.sleep(1)
                     else:
                         products.extend(productQueries)
-        session.commit()
     return isRunning
 
 if __name__ == "__main__":

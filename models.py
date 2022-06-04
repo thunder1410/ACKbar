@@ -3,9 +3,11 @@ from sqlalchemy import ForeignKey
 from sqlalchemy import Integer
 from sqlalchemy import String
 from sqlalchemy import DateTime
+from sqlalchemy import Enum
 from sqlalchemy import func
 from database import Base
 from sqlalchemy.orm import relationship
+import enum
 
 class User(Base):
     __tablename__ = "user"
@@ -20,7 +22,6 @@ class Product(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(30), nullable=False)
     price = Column(Integer, nullable=False)
-    amount = Column(Integer, nullable=False)
     barcodes = relationship("Barcode", back_populates="product", cascade="all, delete")
     def __repr__(self):
         return f"Product(id={self.id!r}, name={self.name!r}, price={self.price!r}, amount={self.amount!r}"
@@ -30,27 +31,49 @@ class Barcode(Base):
     id = Column(Integer, primary_key=True)
     barcode = Column(String(30), nullable=False)
     product_id = Column(Integer, ForeignKey("product.id"), nullable=False)
-    product = relationship("Product", back_populates="barcode")
+    product = relationship("Product", back_populates="barcodes")
     def __repr__(self):
         return f"Barcode(id={self.id!r}, barcode={self.barcode!r}, product_id={self.product_id!r}"
 
-class Log(Base):
-    __tablename__ = "log"
+class BankStorting(Base):
+    __tablename__ = "bankstorting"
     id = Column(Integer, primary_key=True)
     time_created = Column(DateTime(timezone=True), server_default=func.now())
     user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
-    state = Column(String(30), nullable=False)
-    deposited = Column(Integer, nullable=False)
-    def __repr__(self):
-        return f"Log(id={self.id!r}, time_created={self.time_created!r}, user_id={self.user_id!r}, state={self.state!r}, deposited={self.deposited!r}"
+    bedrag = Column(Integer, nullable=False)
+    code = Column(String(30), nullable=False)
 
-class LogProduct(Base):
-    __tablename__ = "logproduct"
+class KasMutatieSoort(enum.Enum):
+    start	= 0
+    storting	= 1
+    afroming	= 2
+    correctie	= 3
+
+class KasMutatie(Base):
+    __tablename__ = "kasmutatie"
     id = Column(Integer, primary_key=True)
-    log_id = Column(Integer, ForeignKey("log.id"), nullable=False)
-    product_id = Column(Integer, ForeignKey("product.id"), nullable=False)
+    time_created = Column(DateTime(timezone=True), server_default=func.now())
+    mutatiesoort = Column(Enum(KasMutatieSoort))
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    bedrag = Column(Integer, nullable=False)
     def __repr__(self):
-        return f"LogProduct(id={self.id!r}, log_id={self.log_id!r}, product_id={self.product_id!r}"
+        return f"Kasmutatie(id={self.id!r}, time_created={self.time_created!r}, mutatiesoort={self.mutatiesoort!r}, user_id={self.user_id!r}, bedrag={self.bedrag!r})"
+
+class VoorraadMutatieSoort(enum.Enum):
+    start	= 0
+    koop	= 1
+    donatie	= 2
+    correctie	= 3
+
+class VoorraadMutatie(Base):
+    __tablename__ = "voorraadmutatie"
+    id = Column(Integer, primary_key=True)
+    time_created = Column(DateTime(timezone=True), server_default=func.now())
+    mutatiesoort = Column(Enum(VoorraadMutatieSoort))
+    product_id = Column(Integer, ForeignKey("product.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("user.id"), nullable=False)
+    hoeveelheid = Column(Integer, nullable=False)
+    bedrag = Column(Integer, nullable=False)
 
 class Font(Base):
     __tablename__ = "font"
