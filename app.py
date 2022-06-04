@@ -113,11 +113,13 @@ def main(Session):
         elif scanned == "u":
             font.score += 1
             font = None
+            session.commit()
 
         # User wants to downvote the logo
         elif scanned == "d":
             font.score -= 1
             font = None
+            session.commit()
 
         # User entered nothing, refresh screen
         elif scanned == "":
