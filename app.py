@@ -101,7 +101,9 @@ def main(Session):
     with Session() as session:
         font = randomFont(session)
         startScreen(font)
-        scanned = input(question("\nType nickname or scan barcode: "))
+    
+    scanned = input(question("\nType nickname or scan barcode: "))
+    with Session() as session:
 
         users = []
 
