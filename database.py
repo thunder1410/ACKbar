@@ -11,7 +11,7 @@ SQLALCHEMY_DATABASE_URI = f"mysql+pymysql://{username}:{password}@ackbar-vm/ackb
 engine = create_engine(
     SQLALCHEMY_DATABASE_URI,
     echo=False,
-    pool_pre_ping=True
+    pool_recycle=3600
 )
 
 Session = sessionmaker(autocommit=False, autoflush=False, bind=engine)
